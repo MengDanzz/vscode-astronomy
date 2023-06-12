@@ -44,6 +44,7 @@ class FitsFile extends Disposable implements vscode.CustomDocument {
 	private _savedEdits: Array<PawDrawEdit> = [];
 
 	private readonly _delegate: PawDrawDocumentDelegate;
+	//private fits: Function
 
 	private constructor(
 		uri: vscode.Uri,
@@ -54,6 +55,11 @@ class FitsFile extends Disposable implements vscode.CustomDocument {
 		this._uri = uri;
 		this._documentData = initialContent;
 		this._delegate = delegate;
+		//this.fits = NUll
+		//let fits: any = require("./fits.js")
+		// this.fits = fits
+		// this.fits()
+		// console.log("fits inited")
 	}
 
 	public get uri() { return this._uri; }
@@ -257,7 +263,7 @@ export class FitsProvider implements vscode.CustomEditorProvider<FitsFile> {
 		webviewPanel.webview.options = {
 			enableScripts: true,
 		};
-		webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview);
+		webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview,document);
 
 		webviewPanel.webview.onDidReceiveMessage(e => this.onMessage(document, e));
 
@@ -272,9 +278,9 @@ export class FitsProvider implements vscode.CustomEditorProvider<FitsFile> {
 				} else {
 					const editable = vscode.workspace.fs.isWritableFileSystem(document.uri.scheme);
 
+					let blob = Buffer.from(document.documentData.buffer).toString()
 					this.postMessage(webviewPanel, 'init', {
-						value: document.documentData,
-						editable,
+						value: blob,
 					});
 				}
 			}
@@ -307,52 +313,95 @@ export class FitsProvider implements vscode.CustomEditorProvider<FitsFile> {
 	/**
 	 * Get the static HTML used for in our editor's webviews.
 	 */
-	private getHtmlForWebview(webview: vscode.Webview): string {
+	private getHtmlForWebview(webview: vscode.Webview,document:FitsFile): string {
 		// Local path to script and css for the webview
-		const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(
-			this._context.extensionUri, 'media', 'pawDraw.js'));
 
-		const styleResetUri = webview.asWebviewUri(vscode.Uri.joinPath(
-			this._context.extensionUri, 'media', 'reset.css'));
+		const nonce = getNonce();
+		const jsList: Array<string> = [
+			'js9/js9prefs.js','js9/js9support.min.js',
+			'js9/js9.js','js9/js9plugins.js','vscode_astro.js'
+		]
+		const jsTags = jsList.map((v,i)=>{
+			const src = webview.asWebviewUri(vscode.Uri.joinPath(
+			this._context.extensionUri, 'media', v));
+			return `<script nonce="${nonce}" type="text/javascript" src="${src}"></script>`;
+		}).join('\n')
 
-		const styleVSCodeUri = webview.asWebviewUri(vscode.Uri.joinPath(
-			this._context.extensionUri, 'media', 'vscode.css'));
+		const cssList: Array<string> = [
+			'js9/js9support.css','js9/js9.css'
+		]
+		var cssTags = 	cssList.map((v,i)=>{
+			const src = webview.asWebviewUri(vscode.Uri.joinPath(this._context.extensionUri,'media', v));
+			return `<link type="text/css" rel="stylesheet" href=${src}`
+		}).join('\n')
+		cssTags = cssTags+(`\n<link rel="apple-touch-icon" href="${this._context.extensionUri,'media', 'images/js9-apple-touch-icon.png'}"}>`)
 
-		const styleMainUri = webview.asWebviewUri(vscode.Uri.joinPath(
-			this._context.extensionUri, 'media', 'pawDraw.css'));
+		const wasmBinaryFile = webview.asWebviewUri(vscode.Uri.joinPath(
+			this._context.extensionUri, 'media', 'js9/astroemw.wasm'));
+		const astroemJS = webview.asWebviewUri(vscode.Uri.joinPath(
+			this._context.extensionUri, 'media', 'js9/astroem.js'));
+		const astroemwJS = webview.asWebviewUri(vscode.Uri.joinPath(
+			this._context.extensionUri, 'media', 'js9/astroemw.js'));
+		const js9WorkerJS = webview.asWebviewUri(vscode.Uri.joinPath(
+			this._context.extensionUri, 'media', 'js9/js9worker.js'));
 
 		// Use a nonce to whitelist which scripts can be run
-		const nonce = getNonce();
 
 		return /* html */`
-			<!DOCTYPE html>
-			<html lang="en">
-			<head>
-				<meta charset="UTF-8">
 
-				<!--
-				Use a content security policy to only allow loading images from https or from our extension directory,
-				and only allow scripts that have a specific nonce.
-				-->
-				<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} blob:; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+   "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
 
-				<meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge;chrome=1" > 
+  <meta name="viewport" content="width=device-width, initial-scale=1">
 
-				<link href="${styleResetUri}" rel="stylesheet" />
-				<link href="${styleVSCodeUri}" rel="stylesheet" />
-				<link href="${styleMainUri}" rel="stylesheet" />
+  <script>
+		if( typeof Module !== "object" ){ Module = {}; }
+		Module.wasmBinaryFile = '${wasmBinaryFile}'
+		Module.astroemJS = '${astroemJS}'
+		Module.astroemwJS = '${astroemwJS}'
+		Module.js9WorkerJS = '${js9WorkerJS}'
+  </script>
+  ${cssTags}
+  ${jsTags}
 
-				<title>Paw Draw</title>
-			</head>
-			<body>
-				<div >
-				This is a fits file
-					
-				</div>
+  <style type="text/css">
+      #div {
+          position: relative;
+          top:  25px;
+          left: 25px;
+      }
+  </style>
+  <title>JS9</title>
 
-				<script nonce="${nonce}" src="${scriptUri}"></script>
-			</body>
-			</html>`;
+</head>
+<body>
+    <div id="js9">
+    <div class="JS9Menubar"></div>
+    <div class="JS9Toolbar"></div>
+    <div class="JS9"></div>
+    <div style="margin-top: 2px;"><div class="JS9Statusbar"></div></div>
+    </div>
+	
+    <script type="text/javascript" nonce="${nonce}">
+	  
+      $(document).ready(function(){
+          $("#js9").draggable({
+            handle: "#JS9Menubar",
+            opacity: 0.35
+          });
+	  window.alert("BreakPoint")  # This will issue an alert on console, convience to add breakpoint here
+      });
+    </script>
+<p>
+</body>
+</html>
+
+`;
 	}
 
 	private _requestId = 1;

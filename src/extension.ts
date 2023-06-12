@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
-import { CatScratchEditorProvider } from './catScratchEditor';
-import { FitsProvider } from './pawDrawEditor';
+import { FitsProvider } from './fitsView';
 // import { FitsProvider } from './fitsImagePreviewer';
 
 export function activate(context: vscode.ExtensionContext) {
